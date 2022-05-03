@@ -131,7 +131,6 @@ def consume(max_length):
 
 
 consumer = Thread(target=consume)
-consumer.setDaemon(True)
 consumer.start()
 
 
@@ -147,7 +146,7 @@ with ThreadPoolExecutor(max_workers=10) as executor:
             executor.submit(produce, i)
         # Stops executors
         executor.shutdown(wait=False)
-        time.sleep(0.1)
+
 
     except:
         print("Error: executor not working.")
