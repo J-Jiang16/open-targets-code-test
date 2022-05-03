@@ -113,14 +113,6 @@ obj.close()
 
 
 
-
-
-
-
-"""
-
-# CSV writer setup goes here
-
 queue = Queue()
 
 
@@ -130,7 +122,7 @@ def consume(max_length):
         try:
             i = queue.get()
             
-            # Row comes out of queue; CSV writing goes here
+            # writing into variables
         except:
             print ("Error: Unable to get queueing element.")
             return
@@ -144,7 +136,7 @@ consumer.start()
 
 
 def produce(i):
-    # Data processing goes here; row goes into queue
+    # Data manipulation; row goes into queue
 
     queue.put(i)
 
@@ -167,4 +159,4 @@ with ThreadPoolExecutor(max_workers=10) as executor:
         logging.info("Main: about to set event of executor shutdown")
         event.set()
 
-consumer.join()"""
+consumer.join()
