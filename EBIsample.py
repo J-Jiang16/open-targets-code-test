@@ -1,29 +1,22 @@
 # Import Python built-in Modules
 from ftplib import FTP
 import pandas as pd
-from threading import Thread
-import _thread
-from queue import Queue
-from concurrent.futures import ThreadPoolExecutor
+import numpy as np
 import os
 
 # Import custom functions
 from retrieve_files import *
 
-#===========================================================================
+#===============================================================================================================
 # Initialization parameter configuration
-#===========================================================================
+#==============================================================================================================
 
 # To download files, set True; If files already exist locally, set False
 download = False
 
-#global variables
-#length for setting consumer termination condition
-max_length = 0
-
-#===========================================================================
+#================================================================================================================
 # Download relevant files from FTP server to the working directory
-#===========================================================================
+#=================================================================================================================
 
 # Fill Required Information
 HOSTNAME = 'ftp.ebi.ac.uk'
@@ -48,115 +41,118 @@ if download:
 # Close the Connection
 ftp_server.quit()
 
-#===========================================================================
+#==============================================================================================================
 # Load relevant information from JSON files to dataframe
-#===========================================================================
-
- 
+#==============================================================================================================
 
 
-thread_number=20
-
+#======================================   evidence   ==========================================================
+# Open evidence files
 df = pd.DataFrame()
 
 dirloc = './evidence/sourceId=eva/'
 
-# Define a function for the thread
-def create_table_single_file(filename):
-    
-    # Opening JSON file
-    # Make sure not reading _SUCCESS file
-    if not filename == '_SUCCESS':  
-        f = open(dirloc + filename, 'r')
+
+#Iterate over files to open and build sub-dataframes of the main dataframe df
+obj = os.scandir(dirloc)
+for entry in obj:
+    if not entry.name == '_SUCCESS':  
+        f = open(dirloc + entry.name, 'r')
        
     # returns one dataframe with desired columns
     df_temp = pd.read_json(f, lines = True)
     f.close()
-    return df_temp[['diseaseId','targetId','score']]
-
-def create_tables(filenames, m):
-    df_new=pd.DataFrame()
-    for t in range(m):
-        df_new = pd.concat([df_new, create_table_single_file(filenames[t])])
-    print(df_new)
-    return df_new
-
-# Create one thread for each single file
-
-    #Iterate over files to open and build sub-dataframes of the main dataframe df
-obj = os.scandir(dirloc)
-k=0
-entry_list = []
-for entry in obj:
-    k+=1
-#reset iterator
-obj = os.scandir(dirloc)
-try:
-    for q in range(thread_number):
-        p=0
-        for entry in obj:
-            p+=1
-            if p >= k // thread_number * q and p < min( k // thread_number * (q + 1), k ):
-                entry_list.append(entry.name)          
-        df[q] = _thread.start_new_thread(create_tables, (entry_list, p,) )
-except:
-    print('Error: Unable to open file or start thread')
-
-print(df)
-
+    df = pd.concat([df, df_temp[['diseaseId','targetId','score']]])
+    
 obj.close()
 
 
+#Group data by target-disease pairs, removing redundant evidence data
+df_new = df.groupby(['diseaseId','targetId']).aggregate(make_lists).reset_index()
 
 
+# Calculate three max scores, median score, and add to new columns
 
+df_new['max 3 scores'] = 0
+df_new['median'] = 0
 
+for row in range(df_new.shape[0]):
+    print(row)
+    #sorted scores array
+    sorted_scores = np.sort(np.array(df_new.iloc[row,2]))
+    print(sorted_scores)
+    #Calculate three max scores
+    if len(sorted_scores) < 3:
+        df_new.iloc[row,3] = sorted_scores.tolist()
+    else:
+        df_new.iloc[row,3] = (sorted_scores[-3:]).tolist()
+     #Calculate median score   
+    print( df_new.iloc[row,3])
+    df_new.iloc[row,4] = np.median(np.array(df_new.iloc[row,2]))
 
+print (df_new)
 
-queue = Queue()
+#============================================  diseases  =========================================================
 
+# Open diseases files
+dirloc = './diseases/'
+# reset df
+df = pd.DataFrame()
 
-def consume(max_length):
+#Iterate over files to open and build sub-dataframes of the main dataframe df
+obj = os.scandir(dirloc)
+for entry in obj:
+    if not entry.name == '_SUCCESS':  
+        f = open(dirloc + entry.name, 'r')
+       
+    # returns one dataframe with desired columns
+    df_temp = pd.read_json(f, lines = True)
+    f.close()
+    df = pd.concat([df, df_temp[['Id','name']]])
+    
+obj.close()
 
-    while not event.is_set() or not queue.empty():
-        try:
-            i = queue.get()
-            
-            # writing into variables
-        except:
-            print ("Error: Unable to get queueing element.")
-            return
-        print(i)
+# Stores diseases Id and name information in this dataframe
+df_diseases_new = df.drop_duplicates()
 
+#========================================  targets  ===================================================================
 
+# Open targets files
+dirloc = './targets/'
+# reset df
+df = pd.DataFrame()
 
-consumer = Thread(target=consume)
-consumer.setDaemon(True)
-consumer.start()
+#Iterate over files to open and build sub-dataframes of the main dataframe df
+obj = os.scandir(dirloc)
+for entry in obj:
+    if not entry.name == '_SUCCESS':  
+        f = open(dirloc + entry.name, 'r')
+       
+    # returns one dataframe with desired columns
+    df_temp = pd.read_json(f, lines = True)
+    f.close()
+    df = pd.concat([df, df_temp[['Id','approvedSymbol']]])
+    
+obj.close()
 
+# Stores targets Id and approvedSymbol information in this dataframe
+df_targets_new = df.drop_duplicates()
 
-def produce(i):
-    # Data manipulation; row goes into queue
+#======================== merge disease name and target approved symbol columns with main table==========================
 
-    queue.put(i)
+# Use left join to join disease and target dataframes to the main dataframe. (left join: keep main intact)
+df_merged1 = pd.merge(df_new, df_diseases_new, on='Key', how='left')
+df_merged2 = pd.merge(df_merged1, df_targets_new, on='Key', how='left')
 
-event = threading.Event()
+#Rank according to median score 
+final_sorted_df = df_merged2.sort_values(by='median', ascending=False).reset_index()
 
-with ThreadPoolExecutor(max_workers=10) as executor:
-    try:
-        for i in range(5000):
-            executor.submit(produce, i)
-        # Stops executors, set events, sets termination conditions for consumers
-        executor.shutdown(wait=False)
-        time.sleep(0.1)
+print(final_sorted_df)
+# At this point should return a table with columns: diseaseID, targetID, max 3 scores, median, disease name, 
+# and target approvedSymbol, sorted in descending order of the median score.
 
-    except:
-        print("Error: executor not working.")
-
-    #Use finally block to make sure even if exception is thrown, event is still set, 
-    #so that consumer will not work indefinitely.
-    finally:
-        logging.info("Main: about to set event of executor shutdown")
-        event.set()
-
-consumer.join()
+#========================================================================================================================
+#Output to JSON file
+#========================================================================================================================
+       
+final_sorted_df.to_json('output.json')
