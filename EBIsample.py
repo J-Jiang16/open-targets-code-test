@@ -136,7 +136,6 @@ consumer.start()
 
 
 def produce(i):
-    # Data manipulation; row goes into queue
 
     queue.put(i)
 
@@ -144,19 +143,13 @@ event = threading.Event()
 
 with ThreadPoolExecutor(max_workers=10) as executor:
     try:
-        for i in range(5000):
+        for i in range(100):
             executor.submit(produce, i)
-        # Stops executors, set events, sets termination conditions for consumers
+        # Stops executors
         executor.shutdown(wait=False)
         time.sleep(0.1)
 
     except:
         print("Error: executor not working.")
-
-    #Use finally block to make sure even if exception is thrown, event is still set, 
-    #so that consumer will not work indefinitely.
-    finally:
-        logging.info("Main: about to set event of executor shutdown")
-        event.set()
 
 consumer.join()
