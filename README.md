@@ -32,7 +32,7 @@ This work does not yet run fully without bugs, so that output is not provided ye
     
 **    Final Task:**
 		Count how many target-target pairs share a connection to at least two diseases.
-		
+		Sort final table obtained from main code (final_sorted_df) according to diseaseId. For each unique diseaseId, enumerate all coresponding target-target 			pairs, which is easily done in pandas. Output the pair list to a new dataframe. Loop over all diseaseId. In the new dataframe, rank target pairs 		 according to frequency. And highlight those with a frequency >=2.
 
 		
 	
